@@ -1,0 +1,37 @@
+# Render Blueprint — deploy from repo root or backend/ folder
+# Dashboard: https://dashboard.render.com → New → Blueprint
+services:
+  - type: web
+    name: gassafer-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GAS_THRESHOLD
+        value: "680"
+      - key: FIREBASE_POLL_MS
+        value: "3000"
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+      - key: SERVER_PUBLIC_URL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_FROM
+        sync: false
+      - key: TWILIO_PHONE_TO
+        sync: false
+      - key: AT_USERNAME
+        sync: false
+      - key: AT_API_KEY
+        sync: false
+      - key: SENSOR_API_KEY
+        sync: false

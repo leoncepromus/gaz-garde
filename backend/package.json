@@ -1,0 +1,23 @@
+{
+  "name": "gassafer-backend",
+  "version": "1.0.0",
+  "description": "Gas Leak Monitor Backend — Firebase + Twilio + Africa's Talking",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "simulate": "node src/simulate.js"
+  },
+  "dependencies": {
+    "africastalking": "^0.6.4",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "firebase-admin": "^12.0.0",
+    "twilio": "^4.23.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}

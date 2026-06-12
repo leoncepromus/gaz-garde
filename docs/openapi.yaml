@@ -1,0 +1,383 @@
+openapi: 3.0.3
+info:
+  title: GasSafer API
+  description: |
+    Backend API for the GasSafer IoT gas leak monitoring system.
+
+    **Data flow**
+    - NodeMCU (ESP8266) → Firebase Realtime Database (`/sensor`) every 3s
+    - Optional: NodeMCU → `POST /api/sensor` → Firebase (via backend)
+    - Mobile app listens to Firebase in real time + calls alert endpoints
+    - Backend watches Firebase and triggers Twilio voice/SMS + USSD queries
+
+    **Authentication**
+    - `POST /api/sensor` accepts optional header `X-Sensor-Key` when `SENSOR_API_KEY` is set in `.env`
+  version: 1.0.0
+  contact:
+    name: GasSafer Team — University of Rwanda
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://YOUR_PUBLIC_URL
+    description: Production (auto-set to your Render/Railway URL when served)
+
+tags:
+  - name: Health
+  - name: Sensor
+  - name: Alerts
+  - name: Twilio
+  - name: USSD
+
+paths:
+  /:
+    get:
+      tags: [Health]
+      summary: Service info
+      responses:
+        '200':
+          description: Running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceInfo'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/gas:
+    get:
+      tags: [Sensor]
+      summary: Current gas level
+      description: Returns the latest `sensor/gasLevel` value from Firebase.
+      responses:
+        '200':
+          description: Current reading
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GasReading'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/sensor:
+    get:
+      tags: [Sensor]
+      summary: Full sensor state
+      description: Gas level plus relay states (electricity, fan) from Firebase `/sensor`.
+      responses:
+        '200':
+          description: Sensor object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SensorData'
+        '404':
+          description: No data yet
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    post:
+      tags: [Sensor]
+      summary: Ingest reading from NodeMCU
+      description: |
+        Write a sensor reading to Firebase. Use this when the device posts to the
+        backend instead of Firebase directly.
+
+        Set `SENSOR_API_KEY` in `.env` and send it as `X-Sensor-Key` header.
+      security:
+        - SensorKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SensorInput'
+            example:
+              gasLevel: 350
+              status: safe
+              threshold: 680
+              electricity: on
+              fan: off
+              rssi: -62
+      responses:
+        '201':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/SensorData'
+        '400':
+          description: Missing gasLevel
+        '401':
+          description: Invalid API key
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/history:
+    get:
+      tags: [Sensor]
+      summary: Reading history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: History array (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoryEntry'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/test-alert:
+    post:
+      tags: [Alerts]
+      summary: Trigger test alert (voice + SMS)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ppm:
+                  type: number
+                  example: 512
+      responses:
+        '200':
+          description: Alert results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResult'
+
+  /api/safe-alert:
+    post:
+      tags: [Alerts]
+      summary: Send all-clear SMS
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ppm:
+                  type: number
+                  example: 120
+      responses:
+        '200':
+          description: SMS result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sms:
+                    $ref: '#/components/schemas/ChannelResult'
+
+  /twiml/alert:
+    get:
+      tags: [Twilio]
+      summary: TwiML voice script (Twilio callback)
+      parameters:
+        - name: ppm
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: TwiML XML
+          content:
+            text/xml:
+              schema:
+                type: string
+
+  /twilio/status:
+    post:
+      tags: [Twilio]
+      summary: Twilio call status webhook
+      responses:
+        '200':
+          description: Acknowledged
+
+  /ussd:
+    post:
+      tags: [USSD]
+      summary: Africa's Talking USSD callback
+      description: Register `POST /ussd` as callback URL for your USSD code (*801*1560#).
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                sessionId:
+                  type: string
+                serviceCode:
+                  type: string
+                phoneNumber:
+                  type: string
+                text:
+                  type: string
+      responses:
+        '200':
+          description: USSD response (plain text, CON/END prefix)
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    SensorKey:
+      type: apiKey
+      in: header
+      name: X-Sensor-Key
+
+  responses:
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+  schemas:
+    ServiceInfo:
+      type: object
+      properties:
+        service:
+          type: string
+        status:
+          type: string
+        version:
+          type: string
+        docs:
+          type: string
+        firebase:
+          type: string
+        threshold:
+          type: string
+
+    GasReading:
+      type: object
+      properties:
+        ppm:
+          type: number
+        status:
+          type: string
+          enum: [safe, danger]
+        threshold:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    SensorData:
+      type: object
+      properties:
+        gasLevel:
+          type: number
+        status:
+          type: string
+          enum: [safe, danger]
+        threshold:
+          type: number
+        electricity:
+          type: string
+          enum: [on, off]
+        fan:
+          type: string
+          enum: [on, off]
+        rssi:
+          type: number
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+        timestamp:
+          type: string
+          format: date-time
+
+    SensorInput:
+      type: object
+      required: [gasLevel]
+      properties:
+        gasLevel:
+          type: number
+          description: Raw MQ-2 ADC value or calibrated ppm
+        status:
+          type: string
+          enum: [safe, danger]
+        threshold:
+          type: number
+        electricity:
+          type: string
+          enum: [on, off]
+        fan:
+          type: string
+          enum: [on, off]
+        rssi:
+          type: number
+
+    HistoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        ppm:
+          type: number
+        status:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ChannelResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        sid:
+          type: string
+        error:
+          type: string
+
+    AlertResult:
+      type: object
+      properties:
+        call:
+          $ref: '#/components/schemas/ChannelResult'
+        sms:
+          $ref: '#/components/schemas/ChannelResult'
