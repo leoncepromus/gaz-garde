@@ -59,7 +59,7 @@ const DEFAULT_SETTINGS: GasSettings = {
   secondaryNumber: '',
   wifiSsid: '',
   wifiPassword: '',
-  cloudServerUrl: process.env.EXPO_PUBLIC_API_URL ?? 'https://garde-gaz.onrender.com',
+  cloudServerUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001',
   apiKey: '',
   autoReset: true,
 };
@@ -74,9 +74,6 @@ export default function SettingsScreen() {
   const [testingCall, setTestingCall] = useState(false);
   const [testingAlert, setTestingAlert] = useState(false);
   const [testingSafeAlert, setTestingSafeAlert] = useState(false);
-  const [loadingServiceInfo, setLoadingServiceInfo] = useState(false);
-  const [simulatingSensor, setSimulatingSensor] = useState(false);
-  const [serviceInfo, setServiceInfo] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [intervalModalVisible, setIntervalModalVisible] = useState(false);
@@ -111,7 +108,11 @@ export default function SettingsScreen() {
       if (!saved) return;
 
       const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-      configureApiBaseUrl(parsed.cloudServerUrl);
+      configureApiBaseUrl(
+        process.env.EXPO_PUBLIC_API_URL
+          ?? parsed.cloudServerUrl
+          ?? 'http://localhost:3001',
+      );
       setSettings(parsed);
       setSafeMax(String(parsed.safeMax ?? DEFAULT_THRESHOLDS.safeMax));
       setWarningMax(String(parsed.warningMax ?? DEFAULT_THRESHOLDS.warningMax));
@@ -124,8 +125,8 @@ export default function SettingsScreen() {
       try {
         const battery = await (navigator as Navigator & {
           getBattery: () => Promise<{
-            addEventListener(arg0: string, arg1: () => void): unknown; level: number; charging: boolean 
-}>;
+            addEventListener(arg0: string, arg1: () => void): unknown; level: number; charging: boolean
+          }>;
         }).getBattery();
         setBatteryLevel(Math.round(battery.level * 100));
         setBatteryCharging(battery.charging);
@@ -282,65 +283,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleLoadServiceInfo = async () => {
-    setLoadingServiceInfo(true);
-    try {
-      const info = await api.getServiceInfo();
-      setServiceInfo(`${info.service} v${info.version ?? '1.0.0'} · ${info.status}`);
-      setBackendStatus('online');
-      Alert.alert(
-        'GET / — Service info',
-        [
-          `Service: ${info.service}`,
-          `Status: ${info.status}`,
-          `Version: ${info.version ?? '—'}`,
-          `Threshold: ${info.threshold ?? '—'}`,
-          `Docs: ${info.docs ?? api.docsUrl()}`,
-        ].join('\n'),
-      );
-    } catch (err) {
-      setBackendStatus('offline');
-      Alert.alert('Failed', err instanceof Error ? err.message : 'GET / failed');
-    } finally {
-      setLoadingServiceInfo(false);
-    }
-  };
-
-  const handleOpenApiDocs = () => {
-    Linking.openURL(api.docsUrl()).catch(() => {
-      Alert.alert('Error', 'Could not open Swagger UI');
-    });
-  };
-
-  const handleSimulateSensor = async () => {
-    const ppm = currentPpm ?? 120;
-    Alert.alert(
-      'POST /api/sensor',
-      `Send simulated reading (${ppm} ppm) to backend → Firebase?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send',
-          onPress: async () => {
-            setSimulatingSensor(true);
-            try {
-              const result = await api.postSensor(
-                { gasLevel: ppm, ppm, status: ppm >= GAS_THRESHOLD ? 'danger' : 'safe' },
-                settings.apiKey || undefined,
-              );
-              Alert.alert('Sensor ingested', `Saved ${sensorPpm(result.data)} ppm via backend`);
-              await loadCurrentPpm();
-            } catch (err) {
-              Alert.alert('Failed', err instanceof Error ? err.message : 'POST /api/sensor failed');
-            } finally {
-              setSimulatingSensor(false);
-            }
-          },
-        },
-      ],
-    );
-  };
-
   const handleSyncNow = async () => {
     setSyncing(true);
     setSyncStatus(null);
@@ -354,7 +296,7 @@ export default function SettingsScreen() {
       setBackendStatus('online');
       setCurrentPpm(gas.ppm);
       setSyncStatus(
-        `GET /health · GET /api/gas · ${gas.ppm} ppm (${gas.status})`
+        `Cloud sync · ${gas.ppm} ppm (${gas.status})`
         + (sensor ? ` · sensor ${sensorPpm(sensor)} ppm` : ''),
       );
       Alert.alert(
@@ -417,7 +359,7 @@ export default function SettingsScreen() {
         : 'battery-dead';
 
   return (
-    <ScreenShell title="Settings" subtitle="Thresholds, alerts, cloud & system">
+    <ScreenShell title="Settings" subtitle="Thresholds, alerts, cloud sync">
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, {
           backgroundColor: backendStatus === 'online' ? THEME.primary
@@ -511,14 +453,12 @@ export default function SettingsScreen() {
           label="Primary contact number"
           value={settings.primaryNumber}
           onChangeText={(v) => patchSettings({ primaryNumber: v })}
-          placeholder="+250..."
         />
         <Divider accent={THEME.dangerBorder} />
         <ContactField
           label="Secondary contact number"
           value={settings.secondaryNumber}
           onChangeText={(v) => patchSettings({ secondaryNumber: v })}
-          placeholder="+250..."
         />
         <ActionButton
           label="Test call (dialer)"
@@ -528,14 +468,14 @@ export default function SettingsScreen() {
           onPress={handleTestCall}
         />
         <ActionButton
-          label="Test voice + SMS (POST /api/test-alert)"
+          label="Test voice + SMS"
           icon="megaphone-outline"
           color={THEME.danger}
           loading={testingAlert}
           onPress={handleTestBackendAlert}
         />
         <ActionButton
-          label="Test safe SMS (POST /api/safe-alert)"
+          label="Test safe SMS"
           icon="checkmark-circle-outline"
           color={THEME.primaryDark}
           loading={testingSafeAlert}
@@ -555,7 +495,6 @@ export default function SettingsScreen() {
           label="Wi-Fi SSID"
           value={settings.wifiSsid}
           onChangeText={(v) => patchSettings({ wifiSsid: v })}
-          placeholder="Network name"
           autoCapitalize="none"
         />
         <Divider accent="rgba(56, 189, 248, 0.2)" />
@@ -563,7 +502,6 @@ export default function SettingsScreen() {
           label="Wi-Fi password"
           value={settings.wifiPassword}
           onChangeText={(v) => patchSettings({ wifiPassword: v })}
-          placeholder="••••••••"
           secureTextEntry
         />
         <Divider accent="rgba(56, 189, 248, 0.2)" />
@@ -571,7 +509,6 @@ export default function SettingsScreen() {
           label="Cloud server URL"
           value={settings.cloudServerUrl}
           onChangeText={(v) => patchSettings({ cloudServerUrl: v })}
-          placeholder="https://garde-gaz.onrender.com"
           autoCapitalize="none"
         />
         <Divider accent="rgba(56, 189, 248, 0.2)" />
@@ -579,45 +516,17 @@ export default function SettingsScreen() {
           label="API key"
           value={settings.apiKey}
           onChangeText={(v) => patchSettings({ apiKey: v })}
-          placeholder="Optional sensor / API key"
           secureTextEntry
           autoCapitalize="none"
         />
         {syncStatus ? <Text style={styles.syncHint}>{syncStatus}</Text> : null}
-        {serviceInfo ? <Text style={styles.syncHint}>{serviceInfo}</Text> : null}
         <ActionButton
-          label="Sync now (GET /health + /api/gas + /api/sensor)"
+          label="Sync now"
           icon="sync-outline"
           color={THEME.info}
           textColor={THEME.bg}
           loading={syncing}
           onPress={handleSyncNow}
-        />
-        <ActionButton
-          label="Service info (GET /)"
-          icon="information-circle-outline"
-          color={THEME.surfaceElevated}
-          textColor={THEME.info}
-          borderColor="rgba(56, 189, 248, 0.35)"
-          loading={loadingServiceInfo}
-          onPress={handleLoadServiceInfo}
-        />
-        <ActionButton
-          label="Open Swagger UI (/api/docs)"
-          icon="document-text-outline"
-          color={THEME.surfaceElevated}
-          textColor={THEME.text}
-          borderColor={THEME.border}
-          onPress={handleOpenApiDocs}
-        />
-        <ActionButton
-          label="Simulate sensor (POST /api/sensor)"
-          icon="hardware-chip-outline"
-          color={THEME.surfaceElevated}
-          textColor={THEME.warning}
-          borderColor="rgba(251, 191, 36, 0.35)"
-          loading={simulatingSensor}
-          onPress={handleSimulateSensor}
         />
       </ColorSection>
 
@@ -671,9 +580,6 @@ export default function SettingsScreen() {
           onPress={handleFactoryReset}
         />
       </ColorSection>
-
-      <Text style={styles.appInfo}>{APP_NAME} v1.0.0 · Danger threshold ref: {GAS_THRESHOLD} ppm</Text>
-      <Text style={styles.appInfo}>Fyp Project Team · 2025–2026</Text>
 
       <Modal visible={intervalModalVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setIntervalModalVisible(false)}>
@@ -780,9 +686,9 @@ function ThresholdInput({
 }
 
 function ContactField({
-  label, value, onChangeText, placeholder,
+  label, value, onChangeText,
 }: {
-  label: string; value: string; onChangeText: (v: string) => void; placeholder?: string;
+  label: string; value: string; onChangeText: (v: string) => void;
 }) {
   return (
     <View style={styles.fieldRow}>
@@ -792,7 +698,6 @@ function ContactField({
         onChangeText={onChangeText}
         keyboardType="phone-pad"
         style={styles.fieldInput}
-        placeholder={placeholder}
         placeholderTextColor={THEME.textMuted}
       />
     </View>
@@ -800,10 +705,10 @@ function ContactField({
 }
 
 function NetworkField({
-  label, value, onChangeText, placeholder, secureTextEntry, autoCapitalize,
+  label, value, onChangeText, secureTextEntry, autoCapitalize,
 }: {
   label: string; value: string; onChangeText: (v: string) => void;
-  placeholder?: string; secureTextEntry?: boolean;
+  secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }) {
   return (
@@ -813,7 +718,6 @@ function NetworkField({
         value={value}
         onChangeText={onChangeText}
         style={styles.fieldInput}
-        placeholder={placeholder}
         placeholderTextColor={THEME.textMuted}
         secureTextEntry={secureTextEntry}
         autoCapitalize={autoCapitalize}

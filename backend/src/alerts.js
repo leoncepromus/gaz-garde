@@ -25,6 +25,7 @@ const HISTORY_INTERVAL_MS = Number(process.env.HISTORY_LOG_MS) || 30000;
 
 let wasLeaking = false;
 let lastLoggedStatus = null;
+let lastLoggedPpm = null;
 let lastHistoryLog = 0;
 let activeIncidentId = null;
 
@@ -50,11 +51,13 @@ async function fireChannels(ppm, incidentId, { escalation = false } = {}) {
 async function maybeLogHistory(ppm, status) {
   const now = Date.now();
   const statusChanged = status !== lastLoggedStatus;
-  const periodicDuringLeak = status === 'danger' && (now - lastHistoryLog) >= HISTORY_INTERVAL_MS;
+  const ppmChanged = ppm !== lastLoggedPpm;
+  const periodicSnapshot = (now - lastHistoryLog) >= HISTORY_INTERVAL_MS;
 
-  if (statusChanged || periodicDuringLeak) {
+  if (statusChanged || ppmChanged || periodicSnapshot) {
     await logReading(ppm, status);
     lastLoggedStatus = status;
+    lastLoggedPpm = ppm;
     lastHistoryLog = now;
   }
 }

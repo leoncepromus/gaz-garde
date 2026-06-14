@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Polyline, Line, Rect, Circle } from 'react-native-svg';
+import Svg, { Polyline, Line, Rect, Circle, Text as SvgText } from 'react-native-svg';
 import { THEME, GAS_THRESHOLD } from '../constants';
 
 type Point = { ppm: number; label?: string };
@@ -21,36 +21,56 @@ export default function GasChart({ data, height = 160, maxPpm = 800 }: GasChartP
   }
 
   const width = 320;
-  const pad = { top: 16, right: 12, bottom: 28, left: 36 };
+  const pad = { top: 18, right: 12, bottom: 34, left: 44 };
   const chartW = width - pad.left - pad.right;
   const chartH = height - pad.top - pad.bottom;
-  const max = Math.max(maxPpm, ...data.map(d => d.ppm), GAS_THRESHOLD + 50);
+  const rawMin = Math.min(...data.map(d => d.ppm));
+  const rawMax = Math.max(...data.map(d => d.ppm));
+  const dataSpread = rawMax - rawMin;
+  const chartPadding = Math.max(dataSpread * 0.2, 10);
+  const yMin = Math.max(0, rawMin - chartPadding);
+  const yMax = Math.max(maxPpm, rawMax + chartPadding, GAS_THRESHOLD + 50, yMin + 20);
+  const range = Math.max(yMax - yMin, 1);
 
   const points = data.map((d, i) => {
     const x = pad.left + (i / Math.max(data.length - 1, 1)) * chartW;
-    const y = pad.top + chartH - (d.ppm / max) * chartH;
-    return { x, y, ppm: d.ppm };
+    const y = pad.top + chartH - ((d.ppm - yMin) / range) * chartH;
+    return { x, y, ppm: d.ppm, label: d.label };
   });
 
   const linePoints = points.map(p => `${p.x},${p.y}`).join(' ');
-  const thresholdY = pad.top + chartH - (GAS_THRESHOLD / max) * chartH;
+  const thresholdY = pad.top + chartH - ((GAS_THRESHOLD - yMin) / range) * chartH;
+  const midValue = Math.round((yMax + yMin) / 2);
+  const yTicks = [yMax, midValue, yMin];
+  const xTicks = [0, Math.floor((points.length - 1) / 2), points.length - 1]
+    .filter((idx, pos, arr) => arr.indexOf(idx) === pos && idx >= 0 && idx < points.length);
 
   return (
     <View style={styles.wrap}>
       <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-          const y = pad.top + chartH * (1 - f);
+        {yTicks.map((value) => {
+          const y = pad.top + chartH - ((value - yMin) / range) * chartH;
           return (
-            <Line
-              key={f}
-              x1={pad.left}
-              y1={y}
-              x2={width - pad.right}
-              y2={y}
-              stroke={THEME.border}
-              strokeWidth={1}
-              strokeDasharray="4,4"
-            />
+            <React.Fragment key={value}>
+              <Line
+                x1={pad.left}
+                y1={y}
+                x2={width - pad.right}
+                y2={y}
+                stroke={THEME.border}
+                strokeWidth={1}
+                strokeDasharray="4,4"
+              />
+              <SvgText
+                x={pad.left - 8}
+                y={y + 3}
+                fill={THEME.textMuted}
+                fontSize={9}
+                textAnchor="end"
+              >
+                {value}
+              </SvgText>
+            </React.Fragment>
           );
         })}
 
@@ -96,6 +116,23 @@ export default function GasChart({ data, height = 160, maxPpm = 800 }: GasChartP
             fill={p.ppm >= GAS_THRESHOLD ? THEME.danger : THEME.primary}
           />
         ))}
+
+        {xTicks.map((idx) => {
+          const point = points[idx];
+          if (!point?.label) return null;
+          return (
+            <SvgText
+              key={`x-${idx}`}
+              x={point.x}
+              y={height - 10}
+              fill={THEME.textMuted}
+              fontSize={9}
+              textAnchor={idx === 0 ? 'start' : idx === points.length - 1 ? 'end' : 'middle'}
+            >
+              {point.label}
+            </SvgText>
+          );
+        })}
       </Svg>
       <View style={styles.legend}>
         <View style={styles.legendItem}>
@@ -104,7 +141,7 @@ export default function GasChart({ data, height = 160, maxPpm = 800 }: GasChartP
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendLine, { backgroundColor: THEME.danger }]} />
-          <Text style={styles.legendText}>Threshold {GAS_THRESHOLD}</Text>
+          <Text style={styles.legendText}>Threshold {GAS_THRESHOLD} ppm</Text>
         </View>
       </View>
     </View>

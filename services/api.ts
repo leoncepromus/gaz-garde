@@ -11,7 +11,7 @@ export function configureApiBaseUrl(url?: string) {
 }
 
 export function getApiBaseUrl() {
-  return apiBaseOverride ?? process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+  return apiBaseOverride ?? process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 }
 
 // ── OpenAPI schemas ─────────────────────────────────────────────────────────

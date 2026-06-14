@@ -5,14 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { GAS_THRESHOLD, THEME } from '../../constants';
-import {
-  subscribeToSensor,
-  subscribeToActiveIncident,
-  getActiveIncident,
-  markPushDelivered,
-  type SensorData,
-  type Incident,
-} from '../../services/firebase';
+import { type Incident } from '../../services/firebase';
 import { api } from '../../services/api';
 import {
   requestPermission,
@@ -54,21 +47,41 @@ export default function Dashboard() {
         api.getGas(),
         api.getSensor().catch(() => null),
       ]);
-      setBackendOnline(health.status === 'ok');
-      setPpm(gas.ppm);
-      setIsLeaking(gas.status === 'danger');
-      setSensorOnline(true);
-      setLastUpdated(new Date(gas.timestamp).toLocaleTimeString('en-RW', {
+      const livePpm = gas.ppm ?? sensor?.ppm ?? sensor?.gasLevel ?? 0;
+      const liveStatus = gas.status
+        ?? (sensor?.status ?? (livePpm >= (sensor?.threshold ?? GAS_THRESHOLD) ? 'danger' : 'safe'));
+      const timeStr = new Date(gas.timestamp ?? Date.now()).toLocaleTimeString('en-RW', {
         timeZone: 'Africa/Kigali',
         hour: '2-digit', minute: '2-digit', second: '2-digit',
-      }));
+      });
+
+      setBackendOnline(health.status === 'ok');
+      setPpm(livePpm);
+      setIsLeaking(liveStatus === 'danger');
+      setSensorOnline(true);
+      setLastUpdated(timeStr);
+      setReadings((prev) => [{ ppm: livePpm, status: liveStatus, time: timeStr }, ...prev.slice(0, 9)]);
+
       if (sensor) {
         if (sensor.electricity) setElectricity(sensor.electricity);
         if (sensor.fan) setFan(sensor.fan);
         if (sensor.rssi != null) setRssi(sensor.rssi);
       }
+
+      if (liveStatus === 'danger' && !wasLeaking.current) {
+        wasLeaking.current = true;
+        await sendLocalLeakAlert(livePpm);
+        router.push('/alert');
+        setAlertStatus('Backend alerting: voice, SMS, USSD…');
+      } else if (liveStatus !== 'danger' && wasLeaking.current) {
+        wasLeaking.current = false;
+        await sendLocalSafeAlert(livePpm);
+        setAlertStatus('resolved');
+        setTimeout(() => setAlertStatus(null), 4000);
+      }
     } catch {
       setBackendOnline(false);
+      setSensorOnline(false);
     } finally {
       setApiRefreshing(false);
     }
@@ -77,7 +90,8 @@ export default function Dashboard() {
   useEffect(() => {
     requestPermission();
     refreshFromBackend();
-    return subscribeToActiveIncident(setActiveIncident);
+    const timer = setInterval(refreshFromBackend, 5000);
+    return () => clearInterval(timer);
   }, [refreshFromBackend]);
 
   useEffect(() => {
@@ -92,53 +106,6 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [isLeaking]);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToSensor(async (data: SensorData) => {
-      const timeStr = new Date().toLocaleTimeString('en-RW', {
-        timeZone: 'Africa/Kigali',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-      });
-
-      setPpm(data.gasLevel);
-      setSensorOnline(true);
-      setLastUpdated(timeStr);
-      setElectricity(data.electricity);
-      setFan(data.fan);
-      if (data.rssi !== undefined) setRssi(data.rssi);
-
-      const leaking = data.status === 'danger';
-      setIsLeaking(leaking);
-
-      setReadings(prev => [
-        { ppm: data.gasLevel, status: data.status, time: timeStr },
-        ...prev.slice(0, 9),
-      ]);
-
-      // Backend watcher owns: incident create, voice/SMS, escalation, history log
-      if (leaking && !wasLeaking.current) {
-        wasLeaking.current = true;
-        await sendLocalLeakAlert(data.gasLevel);
-        router.push('/alert');
-        setAlertStatus('Backend alerting: voice, SMS, USSD…');
-        setTimeout(async () => {
-          const inc = await getActiveIncident();
-          if (inc?.id) await markPushDelivered(inc.id);
-        }, 2500);
-      } else if (!leaking && wasLeaking.current) {
-        wasLeaking.current = false;
-        await sendLocalSafeAlert(data.gasLevel);
-        setAlertStatus('resolved');
-        setTimeout(() => setAlertStatus(null), 4000);
-      } else if (leaking) {
-        const inc = activeIncidentRef.current;
-        if (inc && !inc.acknowledged && (inc.escalationLevel ?? 0) > 0) {
-          setAlertStatus(`Escalation ${inc.escalationLevel} — awaiting acknowledgment`);
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const fillPercent = Math.min(((ppm ?? 0) / 800) * 100, 100);
 

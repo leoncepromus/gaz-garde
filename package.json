@@ -1,9 +1,9 @@
 {
   "name": "gassafer-mobile",
-  "main": "index.ts",
   "version": "1.0.0",
   "private": true,
   "description": "GasSafer — IoT gas leak monitoring (Expo mobile + Node.js backend + NodeMCU)",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "mobile": "expo start",
@@ -40,6 +40,7 @@
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.11",
     "firebase": "^10.14.1",
+    "firebase-admin": "^14.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",

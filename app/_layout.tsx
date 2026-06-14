@@ -9,9 +9,16 @@ export default function RootLayout() {
   useEffect(() => {
     AsyncStorage.getItem('gasSettings')
       .then((saved) => {
-        if (!saved) return;
+        if (!saved) {
+          configureApiBaseUrl(process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001');
+          return;
+        }
         const parsed = JSON.parse(saved) as { cloudServerUrl?: string };
-        configureApiBaseUrl(parsed.cloudServerUrl);
+        configureApiBaseUrl(
+          process.env.EXPO_PUBLIC_API_URL
+            ?? parsed.cloudServerUrl
+            ?? 'http://localhost:3001',
+        );
       })
       .catch(() => {});
   }, []);

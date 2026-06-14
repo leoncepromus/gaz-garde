@@ -54,6 +54,7 @@ function getFirebase() {
 export { getFirebase };
 
 export type SensorData = {
+  rssi: undefined;
   gasLevel: number;
   status: 'safe' | 'danger';
   electricity: 'on' | 'off';

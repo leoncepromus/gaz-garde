@@ -96,7 +96,7 @@ Deploy the `backend/` folder as a web service. Set all env vars from `.env.examp
 Callback URL becomes:
 
 ```
-https://YOUR-APP.onrender.com/ussd
+https://gaz-garde.onrender.com/ussd
 ```
 
 Set `SERVER_PUBLIC_URL` to the same base URL.
@@ -104,7 +104,7 @@ Set `SERVER_PUBLIC_URL` to the same base URL.
 For the Render service in this repo, the default callback is:
 
 ```text
-https://gassafer-backend.onrender.com/ussd
+https://gaz-garde.onrender.com/ussd
 ```
 
 ---
@@ -129,7 +129,7 @@ AT_API_KEY=your_sandbox_api_key_here
 1. In Africa's Talking dashboard → **USSD** → **Create Channel** (or **Service Codes**)
 2. Fill in:
    - **Channel name:** GasSafer
-   - **Callback URL:** `https://YOUR-PUBLIC-URL/ussd`
+  - **Callback URL:** `https://gaz-garde.onrender.com/ussd`
 3. Save — you receive the assigned Africa's Talking code, for example `*801*1560#`.
 
 ### Update the app constant
