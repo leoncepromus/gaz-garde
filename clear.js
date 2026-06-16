@@ -15,21 +15,21 @@ async function clearDatabase() {
   await db.ref('gas/history').remove();
   console.log("✅ gas/history cleared");
 
-  await db.ref('incidents').remove();
-  console.log("✅ incidents cleared");
+  // await db.ref('incidents').remove();
+  // console.log("✅ incidents cleared");
 
-  await db.ref('gas/sensor').set({
-    ppm: 0,
-    status: "safe",
-    timestamp: new Date().toISOString(),
-    unixTime: Date.now()
-  });
-  console.log("✅ gas/sensor reset");
+  // await db.ref('gas/sensor').set({
+  //   ppm: 0,
+  //   status: "safe",
+  //   timestamp: new Date().toISOString(),
+  //   unixTime: Date.now()
+  // });
+  // console.log("✅ gas/sensor reset");
 
-  await db.ref('gas/relay').set(false);
-  console.log("✅ gas/relay reset");
+  // await db.ref('gas/relay').set(false);
+  // console.log("✅ gas/relay reset");
 
-  console.log("\n✨ Done!");
+  // console.log("\n✨ Done!");
   process.exit(0);
 }
 
